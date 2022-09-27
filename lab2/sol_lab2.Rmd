@@ -1,0 +1,265 @@
+---
+title: "sol_lab2"
+author: "Isak Berntsson"
+date: "9/15/2022"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library("HMM")
+library("entropy")
+```
+# Question 1
+## Creating the probability matricies
+
+
+```{r cars}
+n = 10
+
+
+
+startP = rep(1/n,n)
+startP
+
+
+
+P = diag(n) * .5
+# 1,2 2,3 3,4... n-1,n
+for( i in 1:(n-1)){
+  P[i,i+1]=.5
+}
+P[n,1] = .5 #can loop around 
+
+
+head(P)
+
+
+emissionP = matrix(data = 0, nrow=n,ncol=n)
+
+for (i in 1:n){
+  inds = ((i-2):(i+2))-1
+  for ( j in ( inds %% 10 ) ){
+    emissionP[i,j+1]=0.2
+  }
+  
+}
+
+head(emissionP)
+
+```
+Starting probabilities, Transission probabilities and Emission probabilites, are all shown above.
+
+
+```{r}
+symbols = LETTERS[1:n]
+states  = rep("State_",n)
+for ( i in 1:n){
+  states[i] = paste(states[i],symbols[i],sep="")
+}
+
+mod = initHMM(States=symbols, Symbols = symbols, startProbs=startP, transProbs=P, emissionProbs = emissionP)
+
+```
+
+# Question 2
+
+
+```{r}
+set.seed(123)
+simulated_path = simHMM(mod,100)
+
+print(simulated_path)
+
+
+```
+
+
+# Question 3 
+
+```{r}
+obs = simulated_path$observation
+
+f = forward(mod,obs)
+
+filtered = prop.table(t(exp(f)),margin=1)
+
+
+b = backward(mod, obs)
+
+smoothed = prop.table(t(exp(f + b)),margin=1)
+
+
+most_probable_path = viterbi(mod,obs)
+```
+
+
+
+
+
+# Question 4
+
+```{r}
+guesses = matrix(nrow=100,ncol=3)
+colnames(guesses) = c("filtered", "smoothed", "viterbi")
+
+for (i in 1:100){
+  filtered_guess = symbols[ which.max(filtered[i,])]
+  
+  smoothed_guess = symbols[ which.max(smoothed[i,])]
+  
+  guesses[i,1:2] = c(filtered_guess, smoothed_guess)
+}
+guesses[,3] = most_probable_path
+
+acc = colMeans(guesses == simulated_path$states)
+acc
+```
+
+
+
+
+# Question 5
+
+```{r}
+simulated_path = simHMM(mod,100)
+obs = simulated_path$observation
+
+f = forward(mod,obs)
+
+filtered = prop.table(t(exp(f)),margin=1)
+
+
+b = backward(mod, obs)
+
+smoothed = prop.table(t(exp(f + b)),margin=1)
+
+
+most_probable_path = viterbi(mod,obs)
+
+guesses = matrix(nrow=100,ncol=3)
+colnames(guesses) = c("filtered", "smoothed", "viterbi")
+
+for (i in 1:100){
+  filtered_guess = symbols[ which.max(filtered[i,])]
+  
+  smoothed_guess = symbols[ which.max(smoothed[i,])]
+  
+  guesses[i,1:2] = c(filtered_guess, smoothed_guess)
+}
+guesses[,3] = most_probable_path
+
+acc = colMeans(guesses == simulated_path$states)
+acc
+```
+
+
+
+
+# Question 5
+
+```{r}
+acc_mat = matrix(ncol=4, nrow=0)
+colnames(acc_mat) = c("NumSteps", "filtered_acc", "smoothed_acc", "viterbi_acc")
+for  ( iter in 1:50){
+  n = 100
+  
+  simulated_path = simHMM(mod,n)
+  obs = simulated_path$observation
+  
+  f = forward(mod,obs)
+  
+  filtered = prop.table(t(exp(f)),margin=1)
+  
+  
+  b = backward(mod, obs)
+  
+  smoothed = prop.table(t(exp(f + b)) ,margin=1)
+  
+  
+  most_probable_path = viterbi(mod,obs)
+  
+  guesses = matrix(nrow=n,ncol=3)
+  colnames(guesses) = c("filtered", "smoothed", "viterbi")
+  
+  for (i in 1:n){
+    filtered_guess = symbols[ which.max(filtered[i,])]
+    
+    smoothed_guess = symbols[ which.max(smoothed[i,])]
+    
+    guesses[i,1:2] = c(filtered_guess, smoothed_guess)
+  }
+  guesses[,3] = most_probable_path
+  
+  acc = colMeans(guesses == simulated_path$states)
+  
+  acc_mat = rbind(acc_mat, c(n,acc))
+
+  
+  }
+
+
+plot(density(acc_mat[,2]), col ="red",xlab="accuracy", xlim=c(0,1), ylim=c(0,10))
+lines(density(acc_mat[,3]), col ="green")
+lines(density(acc_mat[,4]), col ="blue")
+
+legend("topleft",legend = c("filtered", "smoothed", "viterbi MPP"), col=c("red", "green", "blue"), lty = 1)
+```
+The smoothed distribution takes future data into account and thus has more information avaialbe than the the filtered. This is an "advantage". 
+
+The most probable path has the be a valid path which is a restriction not placed on the smoothed distribution. 
+
+
+
+# Question 6
+```{r}
+
+mat_ents = matrix(nrow=300, ncol=150)
+
+for ( i in 1:150){
+  simulated_path = simHMM(mod,300)
+  obs = simulated_path$observation
+
+  f = forward(mod,obs)
+
+  filtered = prop.table(t(exp(f)),margin=1)
+  entropy_vec = apply(filtered,1, entropy.empirical )
+  mat_ents[,i] = entropy_vec
+  
+  
+  
+}
+
+ent_means = apply(mat_ents,1,mean)
+plot(x=1:300, y = ent_means, main="averag entropy after n steps", xlab="n steps", ylab="average entropy")
+
+
+```
+
+
+ There is a sharp decline after the first ( ~3) steps. After that the values seem the be relatively stable
+
+
+# Question 7
+
+```{r}
+set.seed(123)
+simulated_path = simHMM(mod,100)
+obs = simulated_path$observation
+
+f = forward(mod,obs)
+
+filtered = prop.table(t(exp(f)),margin=1)
+
+prob_101 = round(filtered[100,] %*% P, digits = 3)
+rownames(prob_101)= "Inferred Probabilty"
+colnames(prob_101) = symbols
+prob_101
+```
+
+
+
+
+
+
+
