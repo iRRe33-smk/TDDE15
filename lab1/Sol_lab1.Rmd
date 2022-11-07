@@ -31,14 +31,16 @@ head(dat)
 ```{r}
 set.seed(123)
 for (sc in c("loglik", "aic", "k2")){
-
-  mod_base = hc(dat, score=sc)
-plot(mod_base, main=paste("scoring function:",sc))
+  for (rs in c(1,10)){
+    mod_base = hc(dat, score=sc, restart = rs)
+    plot(mod_base, main=paste("scoring function:",sc, "restarts:",rs))
+  }
 }
 
 ```
 
-the learned networks all have non-equivalent structures. Suggesting that a different scoring function yields different best networks.
+the learned networks all have non-equivalent structures. Suggesting that a different scoring function yields different best networks. 
+We can also see that the number of restarts can affect the networks learned. Running the algorithm over and over helps us avoid getting stuck in a local minimum and instead find a the global minimum during at least one of our runs.
 
 
 # Question 2
@@ -57,11 +59,11 @@ print(mean(train_dat$S=="yes"))
 print(mean(test_dat$S=="yes"))
 
 #learning model and paramets from training_set
-mod_80 = hc(train_dat,score="bic", restart=5 )
-fitted = bn.fit(mod_80,train_dat)
+mod_80 = hc(train_dat,score="bic", restart=5 ) #hc learns the strucutre of the network
+fitted = bn.fit(mod_80,train_dat) # bn.fit learns the parameters of the network i.e p(y|X1,X2... )
 
 plot(mod_80)
-
+fitted
 
 
 ```
@@ -72,8 +74,9 @@ Approximate inference using cpquery()
 ```{r}
 set.seed(123)
 results = matrix(nrow=nrow(test_dat),ncol=1)
+
+#overy case has to be predicted individually. 
 for (i in 1:nrow(test_dat)){
-  row = as.matrix(test_dat[i,])
   prob  = cpquery(fitted,
           event = S=="yes", 
           evidence = (A==test_dat[i,1]) & (T==test_dat[i,3]) & (L==test_dat[i,4]) & (B==test_dat[i,5]) & (E==test_dat[i,6]) & (X==test_dat[i,7]) & (D==test_dat[i,8])
@@ -82,9 +85,10 @@ for (i in 1:nrow(test_dat)){
   results[i] = prob
   }
 
-#
+
 conf_matrix = table(results>=.5,test_dat$S)
-accuracy = (conf_matrix[1,1]  + conf_matrix[2,2]) / sum(conf_matrix)
+accuracy = sum(diag(conf_matrix))/ sum(conf_matrix)
+
 print(conf_matrix)
 print(paste("accuracy:",accuracy))
 
@@ -117,13 +121,14 @@ for (i in 1:nrow(test_dat)){
 
 
 conf_matrix = table(results>=.5,test_dat$S)
-accuracy = (conf_matrix[1,1]  + conf_matrix[2,2]) / sum(conf_matrix)
+accuracy = sum(diag(conf_matrix))/ sum(conf_matrix)
+
 print(conf_matrix)
 print(paste("accuracy:",accuracy))
 
 
 ```
-the learned and non-true network shows slighty results.
+the learned and non-true network show slighty worse results.
 
 
 
@@ -146,7 +151,7 @@ blanket = blanket[(blanket!="S")]
 
 print(blanket)
 
-mb(mod_80,"S")
+mb(mod_80,"S") #this will give the blanket
 
 # P.S. noticed the instruction too late, at least they are the same :)
 
@@ -173,7 +178,8 @@ results = matrix(nrow=nrow(test_dat),ncol=1)
 
 
 conf_matrix = table(results>=.5,test_dat$S)
-accuracy = (conf_matrix[1,1]  + conf_matrix[2,2]) / sum(conf_matrix)
+accuracy = sum(diag(conf_matrix))/ sum(conf_matrix)
+
 print(conf_matrix)
 print(paste("accuracy:",accuracy))
 ```
@@ -188,6 +194,7 @@ Creating and fitting the Naive Bayes classifier
 
 ```{r}
 set.seed(123)
+
 target_var = "S"
 others = c("A","T","B","L","E","X","D")
 
@@ -196,12 +203,12 @@ colnames(nb_arcs) = c("from", "to")
 
 nb_arcs[,1] = target_var
 nb_arcs[,2] = others
-nb_arcs
+nb_arcs #table of created arcs. Has to be named, from to
 
 my_nb = empty.graph(c(target_var,others))
 my_nb$arcs = nb_arcs
 
-#plot(true_net)
+
 plot(my_nb)
 bn_fitted = bn.fit(my_nb,train_dat)
 ```
@@ -238,9 +245,11 @@ the result is much worse
 
 
 
-The results are all different due to the arcs and probabilities learned. Usin only the markov blanket during inference made only insignificant difference to the the full network from question 2.
+The results are all different due to the arcs and probabilities learned. Using only the markov blanket during inference made only insignificant difference to the the full network from question 2.
 
-The so,called true network was not materially better than the one trained on 80% of the data.
+The so called true network was not materially better than the one trained on 80% of the data.
+
+The naive classifier was dissapointing. 
 
 
 

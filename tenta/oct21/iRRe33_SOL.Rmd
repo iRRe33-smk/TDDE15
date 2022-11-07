@@ -1,0 +1,412 @@
+---
+title: "iRRe33_SOL"
+author: "Isak Berntsson"
+date: "10/24/2022"
+output: pdf
+---
+
+```{r}
+library("bnlearn")
+library("gRain")
+```
+
+
+```{r}
+
+data("asia")
+net = model2network("[A][S][T|A][L|S][B|S][D|B:E][E|T:L][X|E]")
+
+fittedNet = bn.fit(net,asia, method = "bayes")
+
+
+fittedNet$A$prob
+
+dist = (cpdist(fittedNet, "S", evidence = D=="no"))
+dist
+mean(dist=="yes")
+```
+
+
+
+
+
+```{r}
+n = 100000
+plot(net)
+order = node.ordering(fittedNet)
+
+print(order)
+samp = matrix(0,nrow=n,ncol=length(order))
+colnames(samp) = order
+
+for (i in 1:n){
+  
+  probs = fittedNet$A$prob
+  a = sample(c("no", "yes"), 1, prob=probs)
+  
+
+  probs = fittedNet$S$prob
+  s = sample(c("no", "yes"), 1, prob=probs)
+  
+  probs = fittedNet$B$prob
+  b = sample(c("no", "yes"), 1, prob=probs[,s])
+  
+  
+  probs = fittedNet$L$prob
+  l = sample(c("no", "yes"), 1, prob=probs[,s])
+
+  
+  probs = fittedNet$T$prob
+  t = sample(c("no", "yes"), 1, prob=probs[,a])
+  
+  probs = fittedNet$E$prob
+  e = sample(c("no", "yes"), 1, prob=probs[,l,t])
+  
+  probs = fittedNet$D$prob
+  d = sample(c("no", "yes"), 1, prob=probs[,a,e])
+
+  probs = fittedNet$X$prob
+  x = sample(c("no", "yes"), 1, prob=probs[,e])
+
+  
+  
+  samp[i,] = c(a, s, b, l , t, e, d, x)
+}
+
+
+print(samp)
+
+
+conditional_inexact = mean(samp[samp[,7]=="yes",2]=="yes")
+
+
+
+
+
+grainNet = as.grain(fittedNet)
+unconditional = querygrain(grainNet,("S"))[[1]][2]
+
+grainNet = setEvidence(grainNet, nodes = c("D"), states = c("yes") )
+conditional = querygrain(grainNet,("S"))[[1]][2]
+
+print(paste("conditional approximate", conditional_inexact))
+print(paste("unconditional exact", unconditional))
+print(paste("conditional exact", conditional))
+
+
+
+
+
+```
+
+# Task 2 HMM
+```{r}
+library("HMM")
+
+startProbs = c(1,0,0)
+
+States = c("healthy", "sick1", "sick")
+n = length(States)
+transProbs = matrix(0, nrow=n, ncol = n)
+
+
+
+
+transProbs[1,1] = .9 #conthelth
+transProbs[1,2] = .1 #get sick
+transProbs[2,3] = 1 #day1-n
+#transProbs[3,4] = 1 # dday2-3
+transProbs[3,1] = .2 #dayn -> helth
+transProbs[3,3] = .8 # dayn->dayn
+
+print(transProbs)
+
+
+
+Symbols = c("healthy", "sick", "sick")
+m = length(Symbols)
+emissionProbs = matrix(0, nrow=m, ncol = m)
+emissionProbs[1,1] = .6
+emissionProbs[1,3] = .4
+emissionProbs[2,3] = .7
+emissionProbs[2,1] = .3
+
+emissionProbs[3,3] = .7
+emissionProbs[3,1] = .3
+print(emissionProbs)
+
+
+
+hmm = initHMM(States, Symbols,startProbs, transProbs,emissionProbs )
+
+simLen = 100
+sim = simHMM(hmm,simLen)
+
+
+for (t in 1:(simLen-1) ){
+  if(sim$states[t] == "sick1" ){
+    if(sim$states[t+1] != "sick"){        
+      
+      print(paste("fail at ", t))
+    
+    }
+  }
+}
+
+
+
+
+```
+
+
+
+
+
+
+# Task3 Reinforcement Learning
+
+```{r}
+library(ggplot2)
+l
+
+
+arrows <- c("^", ">", "v", "<")
+action_deltas <- list(c(1,0), # up
+                      c(0,1), # right
+                      c(-1,0), # down
+                      c(0,-1)) # left
+
+vis_environment <- function(iterations=0, epsilon = 0.5, alpha = 0.1, gamma = 0.95, beta = 0){
+  
+  # Visualize an environment with rewards. 
+  # Q-values for all actions are displayed on the edges of each tile.
+  # The (greedy) policy for each state is also displayed.
+  # 
+  # Args:
+  #   iterations, epsilon, alpha, gamma, beta (optional): for the figure title.
+  #   reward_map (global variable): a HxW array containing the reward given at each state.
+  #   q_table (global variable): a HxWx4 array containing Q-values for each state-action pair.
+  #   H, W (global variables): environment dimensions.
+  
+  df <- expand.grid(x=1:H,y=1:W)
+  foo <- mapply(function(x,y) ifelse(reward_map[x,y] == 0,q_table[x,y,1],NA),df$x,df$y)
+  df$val1 <- as.vector(round(foo, 2))
+  foo <- mapply(function(x,y) ifelse(reward_map[x,y] == 0,q_table[x,y,2],NA),df$x,df$y)
+  df$val2 <- as.vector(round(foo, 2))
+  foo <- mapply(function(x,y) ifelse(reward_map[x,y] == 0,q_table[x,y,3],NA),df$x,df$y)
+  df$val3 <- as.vector(round(foo, 2))
+  foo <- mapply(function(x,y) ifelse(reward_map[x,y] == 0,q_table[x,y,4],NA),df$x,df$y)
+  df$val4 <- as.vector(round(foo, 2))
+  foo <- mapply(function(x,y) 
+    ifelse(reward_map[x,y] == 0,arrows[GreedyPolicy(x,y)],reward_map[x,y]),df$x,df$y)
+  df$val5 <- as.vector(foo)
+  foo <- mapply(function(x,y) ifelse(reward_map[x,y] == 0,max(q_table[x,y,]),
+                                     ifelse(reward_map[x,y]<0,NA,reward_map[x,y])),df$x,df$y)
+  df$val6 <- as.vector(foo)
+  
+  print(ggplot(df,aes(x = y,y = x)) +
+          scale_fill_gradient(low = "white", high = "green", na.value = "red", name = "") +
+          geom_tile(aes(fill=val6)) +
+          geom_text(aes(label = val1),size = 4,nudge_y = .35,na.rm = TRUE) +
+          geom_text(aes(label = val2),size = 4,nudge_x = .35,na.rm = TRUE) +
+          geom_text(aes(label = val3),size = 4,nudge_y = -.35,na.rm = TRUE) +
+          geom_text(aes(label = val4),size = 4,nudge_x = -.35,na.rm = TRUE) +
+          geom_text(aes(label = val5),size = 10) +
+          geom_tile(fill = 'transparent', colour = 'black') + 
+          ggtitle(paste("Q-table after ",iterations," iterations\n",
+                        "(epsilon = ",epsilon,", alpha = ",alpha,"gamma = ",gamma,", beta = ",beta,")")) +
+          theme(plot.title = element_text(hjust = 0.5)) +
+          scale_x_continuous(breaks = c(1:W),labels = c(1:W)) +
+          scale_y_continuous(breaks = c(1:H),labels = c(1:H)))
+  
+}
+
+GreedyPolicy <- function(x, y){
+  
+  # Get a greedy action for state (x,y) from q_table.
+  #
+  # Args:
+  #   x, y: state coordinates.
+  #   q_table (global variable): a HxWx4 array containing Q-values for each state-action pair.
+  # 
+  # Returns:
+  #   An action, i.e. integer in {1,2,3,4}.
+  
+  foo <- which(q_table[x,y,] == max(q_table[x,y,]))
+  return (ifelse(length(foo)>1,sample(foo, size = 1),foo))
+  
+}
+
+EpsilonGreedyPolicy <- function(x, y, epsilon){
+  
+  # Get an epsilon-greedy action for state (x,y) from q_table.
+  #
+  # Args:
+  #   x, y: state coordinates.
+  #   epsilon: probability of acting randomly.
+  # 
+  # Returns:
+  #   An action, i.e. integer in {1,2,3,4}.
+  
+  rand = runif(1)
+  if (rand < epsilon){
+    res = sample(1:4,1)
+  }else{
+    res = GreedyPolicy(x,y)
+  }
+  return(res)
+}
+
+transition_model <- function(x, y, action, beta){
+  
+  # Computes the new state after given action is taken. The agent will follow the action 
+  # with probability (1-beta) and slip to the right or left with probability beta/2 each.
+  # 
+  # Args:
+  #   x, y: state coordinates.
+  #   action: which action the agent takes (in {1,2,3,4}).
+  #   beta: probability of the agent slipping to the side when trying to move.
+  #   H, W (global variables): environment dimensions.
+  # 
+  # Returns:
+  #   The new state after the action has been taken.
+  
+  delta <- sample(-1:1, size = 1, prob = c(0.5*beta,1-beta,0.5*beta))
+  final_action <- ((action + delta + 3) %% 4) + 1
+  foo <- c(x,y) + unlist(action_deltas[final_action])
+  foo <- pmax(c(1,1),pmin(foo,c(H,W)))
+  
+  return (foo)
+}
+
+q_learning <- function(start_state, epsilon = 0.5, alpha = 0.1, gamma = 0.95, 
+                       beta = 0, tr = 1){
+  
+  # Perform one episode of Q-learning. The agent should move around in the 
+  # environment using the given transition model and update the Q-table.
+  # The episode ends when the agent reaches a terminal state.
+  # 
+  # Args:
+  #   start_state: array with two entries, describing the starting position of the agent.
+  #   epsilon (optional): probability of acting greedily.
+  #   alpha (optional): learning rate.
+  #   gamma (optional): discount factor.
+  #   beta (optional): slipping factor.
+  #   reward_map (global variable): a HxW array containing the reward given at each state.
+  #   q_table (global variable): a HxWx4 array containing Q-values for each state-action pair.
+  # 
+  # Returns:
+  #   reward: reward received in the episode.
+  #   correction: sum of the temporal difference correction terms over the episode.
+  #   q_table (global variable): Recall that R passes arguments by value. So, q_table being
+  #   a global variable can be modified with the superassigment operator <<-.
+  
+  cur_pos <- start_state
+  episode_correction <- 0
+  
+  repeat{
+    # Follow policy, execute action, get reward.
+    action <- EpsilonGreedyPolicy(cur_pos[1], cur_pos[2], epsilon*tr)
+    new_pos <- transition_model(cur_pos[1], cur_pos[2], action, beta)
+    reward <- reward_map[new_pos[1], new_pos[2]]
+    
+    # Q-table update.
+    old_q <- q_table[cur_pos[1], cur_pos[2], action]
+    correction <- reward + gamma*max(q_table[new_pos[1], new_pos[2], ]) - old_q
+    q_table[cur_pos[1], cur_pos[2], action] <<- old_q + alpha*correction*tr
+    
+    cur_pos <- new_pos
+    episode_correction <- episode_correction + correction*tr
+    
+    if(reward!=0)
+      # End episode.
+      return (c(reward,episode_correction))
+  }
+  
+}
+
+#####################################################################################################
+# Q-Learning Environments
+#####################################################################################################
+
+# Environment B (the effect of epsilon and gamma)
+
+H <- 7
+W <- 8
+
+reward_map <- matrix(0, nrow = H, ncol = W)
+reward_map[1,] <- -1
+reward_map[7,] <- -1
+reward_map[4,5] <- 5
+reward_map[4,8] <- 10
+
+q_table <- array(0,dim = c(H,W,4))
+
+#vis_environment()
+
+numIts = 30000
+
+eps = c(.1, .25, .5)
+gamma = c(.5, .75, .95)
+beta = 0
+alpha = .1
+
+#results = list("params" = c(), "q_tables" = c())
+
+results = array(dim = c(H,W,4,3,3))
+
+
+start_state = c(4,1)
+
+for ( i in 1:length(eps)){
+  for (j in 1:length(gamma)){
+    
+    
+    q_table <- array(0,dim = c(H,W,4))
+    
+    for (it in 1:numIts){
+      q_learning(start_state, eps[i], alpha, gamma[j], beta, 1)          
+    }
+    results[,,,i,j] = q_table
+    }
+}
+
+
+
+```
+
+
+
+
+
+```{r}
+valResults = matrix(nrow=0,ncol = 3)
+numIts = 1000
+for ( i in 1:length(eps)){
+  for (j in 1:length(gamma)){
+    
+    q_table = results[,,,i,j] 
+    rews = array(dim=numIts)
+    for (it in 1:numIts){
+      rews[it] = q_learning(start_state, eps[i], alpha, gamma[j], beta, 0)[1]        
+    }
+    meanRew = mean(rews)
+    valResults = rbind(valResults, c(eps[i],gamma[j],meanRew))
+    }
+}
+vis_environment()
+
+print(valResults)
+```
+
+
+
+# Task4 
+```{r}
+
+
+
+
+```
+
+

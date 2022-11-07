@@ -1,0 +1,188 @@
+---
+title: "iRRe33_SOL"
+author: "Isak Berntsson"
+date: "10/23/2022"
+output: pdf_document
+---
+
+
+
+```{r}
+
+library("bnlearn")
+
+G = empty.graph(nodes=c("M","D","C"))
+
+arcs = matrix(data = c("D","M", "C","M"),nrow=2, byrow=TRUE)
+G$arcs = arcs
+
+#plot(G)
+doors = c("Door1","Door2","Door3")
+cptC = matrix(c(1/3, 1/3, 1/3), ncol = 3, dimnames = list(NULL, doors ))
+cptD = matrix(c(1/3, 1/3, 1/3), ncol = 3, dimnames = list(NULL, doors))
+
+cptM = c(
+       c(0,.5, .5,
+         0, 0,   1, 
+         0, 1, 0 ),
+       c(0, 1, 0,
+         .5, 0, .5, 
+         1, 0, 0 ),
+       c(0, 1, 0,
+         1, 0, 0, 
+         .5, .5, 0 )
+)
+       
+dim(cptM) = c(3, 3, 3)
+dimnames(cptM) = list("M" = doors,"C" = doors, "D" =  doors)
+
+
+
+
+cfit = custom.fit(G, dist = list(C = cptC, D = cptD, M = cptM))
+# for ordinal nodes it is nearly the same.
+#cfit = custom.fit(net, dist = list(A = cptA, B = cptB, C = cptC),
+#         ordinal = c("A", "B"))
+
+
+#cfit = custom.fit(G, dist
+
+plot(G)
+
+#prior car
+dist = as.matrix(cpdist(fitted = cfit,"C", evidence = TRUE)) # 1/3
+
+carpriori = table(dist) / length(dist)
+choice_idx = which.max(carpriori)
+choice = doors[choice_idx]
+choice = doors[1]
+
+montyChoice = doors[2]
+
+
+dist_post = as.matrix(
+  cpdist(
+    fitted = cfit, 
+    nodes = c("C"), 
+         evidence = ((D==choice) & (M == montyChoice))
+         )
+
+dist_post
+```
+
+
+
+
+
+
+
+# Task 4
+```{r}
+
+dat = read.csv("https://github.com/STIMALiU/AdvMLCourse/raw/master/GaussianProcess/
+Code/TempTullinge.csv", header=TRUE, sep=";")
+head(data)
+
+dates = as.Date(dat$date, "%d/%m/%y")
+n = length(dates)
+time = 1:n
+day = time %% 365
+day[365:n] = day[365:n]+1
+sample_ind = time %% 5 == 1
+sample_time = time[sample_ind]
+sample_day = day[sample_ind]
+sample_temp = dat$temp[sample_ind]
+sample_dat = data.frame(time = sample_time, day = sample_day, temp = sample_temp)
+
+
+
+
+```
+
+
+
+
+```{r}
+
+posteriorGP = function(X, y, X_star, sigmaNoise, k){
+  n = length(X)
+  K = k(X,X )
+  k_star = k(X,X_star )
+  L = t(chol(K + sigmaNoise^2*diag(n)))
+  alpha = solve(t(L),solve(L,y))
+  mean_pred = t(k_star) %*% alpha #predictive mean
+  v = solve(L,k_star)
+  var_pred= k(X_star, X_star) - t(v) %*% v # predictive var
+  logmarglik = -.5 * t(y) %*% alpha - sum(log(diag(L))) - .5*n*log(2*pi)
+return(list(mean=mean_pred, var= var_pred, logmarglik = logmarglik))
+}
+
+SEK = function(ell, sigmaf){
+  SEK_kernel = function(X,X_star){
+    X = as.matrix(X)
+    X_star = as.matrix(X_star)
+    res = matrix(0,nrow=length(X),ncol=length(X_star))
+    #print(dim(res))
+      for( i in 1:length(X)){
+      vals = sigmaf^2 * exp(-.5 * ((X-X_star[i,])/ell)^2)
+      res[i,] = vals
+      }
+    return(res)
+  }
+  class(SEK_kernel) = "kernel"
+  return(SEK_kernel)
+}
+
+```
+
+
+
+```{r}
+
+
+ell = .2
+sigma_f = 20
+sigma_n = 1
+kern = SEK(ell, sigma_f)
+
+X = sample_day
+y = sample_temp
+
+
+fun = function(par){
+  kern = SEK(par[1], par[2])
+  
+  posterior = posteriorGP(X,y,X,sigma_n, kern)
+  
+  print(posterior$logmarglik)
+  
+  return(posterior$logmarglik)
+}
+
+#fun(ell,sigma_f)
+
+
+optires = optim(
+  par = c(1,.1),
+  fn = fun,
+  method="L-BFGS-B",
+  lower = c(.Machine$double.eps, .Machine$double.eps),
+  control=list(fnscale=-1)
+)
+
+
+
+best_
+```
+
+
+
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,285 @@
+---
+title: "isakOct17"
+author: "Isak Berntsson"
+date: "10/22/2022"
+output: pdf_document
+---
+```{r setup}
+setwd("C:/Users/IsakG/projects/TDDE15/tenta/oct17")
+library("bnlearn")
+library("gRain")
+data("asia")
+
+```
+
+
+# Task 1 Graphical Models
+## Independene
+
+```{r}
+set.seed(1337)
+#head(asia)
+labels = colnames(asia)
+baseNet = hc(asia, restart = 1, score = "bic")
+
+plot(baseNet)
+
+# D _|_ X | E
+
+baseNetFitted = bn.fit(baseNet,asia)
+hc_raw = compile(as.grain(baseNetFitted))
+
+res = matrix(0,nrow = 0, ncol=3)
+colnames(res) = c("D","X","E")
+for (x in c("no","yes")){
+  for (e in c("no","yes")){
+    
+    print(paste(x,e))
+    hc = setFinding(hc_raw,nodes = c("X","E"), states = c(x,e))
+    probYes = querygrain(hc,c("D"))$D[2]
+    res = rbind(res,c(probYes,x,e)) 
+  }
+}
+res
+
+# we see that the probabilitty of D=="yes" is independent of X given E
+# D _|_ X | E
+
+
+
+```
+## Essential
+
+
+```{r}
+set.seed(1337)
+#n = ceiling(29281*1)
+n = 1000
+nodes = LETTERS[1:5]
+graphs = random.graph(nodes,num = n, method = "melancon",every = 50, burn.in=30000)
+graphs = unique(graphs)
+
+essentials = lapply(graphs,cpdag)
+
+num_essentials = 0
+#checks if cpdag-func returned the original dag. IE the graph was already essential
+
+#If the cpdag contains only directed arcs there are no markov equivalent graphs to the original, thus the original graph is essential. 
+
+for ( i in 1:length(graphs)){
+ if ( all.equal(essentials[[i]], graphs[[i]]) == TRUE){
+   num_essentials = num_essentials +1
+   print(i)
+   
+#   if (runif(1) <.005){
+#     plot(graphs[[i]])
+#   }
+ }
+   
+}
+
+frac = num_essentials / length(graphs)
+#plot(graphs[[20291]])
+#plot(graphs[[14514]])
+#plot(graphs[[14514]])
+#plot(graphs[[25561]])
+
+```
+
+
+
+```{r}
+
+plot(graphs[[981]])
+plot(cpdag(graphs[[981]]))
+
+plot(graphs[[980]])
+plot(cpdag(graphs[[980]]))
+#plot(graphs[[14514]])
+#plot(graphs[[14514]])
+#plot(graphs[[25561]])
+```
+
+
+
+
+
+# Task 2 hidden markov models
+##
+```{r setup}
+library(HMM)
+```
+
+
+```{r}
+myStates = (1:100)
+
+startProbs = rep(1/100,100)
+
+#upper bidiag [0.1 0.9]
+transProbs = diag(.1,100,100)
+for (i in 2:99){
+  transProbs[i-1,i] = .9
+}
+
+doorStates = c(10:12 , 20:22, 30:32)
+emissionProbs = matrix(0,100,2, byrow=F)
+
+emissionProbs[doorStates,1] = .9
+emissionProbs[doorStates,2] = .1
+
+emissionProbs[-doorStates,1] = .1
+emissionProbs[-doorStates,2] = .9
+
+emissionProbs[10:15,]
+
+
+mod = initHMM(
+  States = myStates
+  ,Symbols = c("1", "0")
+  ,startProbs = startProbs
+  ,transProbs = transProbs
+  ,emissionProbs = emissionProbs
+    )
+
+#simHMM(mod,100)
+which.maxima<-function(x){
+return(which(x==max(x)))
+}
+
+```
+
+```{r}
+trajectory  = simHMM(mod, 1000)
+
+
+#sees three door and then many non-doors.
+myseq = c( rep("1",3), rep("0",15))
+
+probs = prop.table(exp(forward(mod,myseq)),2)
+
+apply(probs,2,which.maxima)
+
+```
+# Task 3 Gaussian Process
+
+## subtask a
+
+```{r setup}
+library(kernlab)
+library(mvtnorm)
+source("kernelCode.R")
+load("GPdata.RData")
+```
+
+
+
+```{r}
+sigma_f = 1
+xGrid = seq(-1, 1, by=.1)
+
+
+colors = c("red","green","blue","brown","black")
+for ( ell in c(.2,1)){
+
+  for ( i in 1:5){
+    kern = k(sigmaf = 1, ell = ell)
+
+    K = kernelMatrix(kernel = kern, x = xGrid, y = xGrid)
+    
+    draw = rmvnorm(1,mean = rep(0,length(xGrid)), sigma = K)
+    if ( i == 1){
+      plot(xGrid, draw, col=colors[i], ylim = c(-2, 2), type="l", main = paste("5 realisations, ell =", ell))
+      
+    print(paste("Corr(f(0), f(0.1))=",K[11,12], "ell=",ell))
+    
+    print(paste("Corr(f(0), f(0.5))=",K[11,16], "ell=",ell))
+
+    }else{
+      lines(xGrid,draw, col=colors[i])
+    }
+    
+  }
+}
+
+# The correlations show that a smaller dX gives higher correlation and a larger ell does the same. 
+# It seems as though correlations is a function of dx/ell
+# this comes from the kernel wich is defined with r^2 / l^2 
+
+
+```
+
+
+
+
+
+```{r}
+getGaussCov = function(kern, x,x_star){
+covMat = kernelMatrix(kern,x_star, x_star) - kernelMatrix(kern, x_star,x) %*% solve(kernelMatrix(kern,x,x) + sigma_n * diag(length(x))) %*%kernelMatrix(kern,x,x_star)
+return(covMat)  
+}
+
+
+```
+
+
+## subtask b
+```{r}
+
+sigma_n = 0.2
+ell = c(0.01, .2, 1, 5, 10)
+sigma_f = 1
+  
+for (l in ell){  
+  kern = k(sigma_f, ell = l)
+  fitted = gausspr(x=x, y=y,scaled=T, kernel = kern, var = sigma_n^2)
+ 
+
+ 
+ 
+  covMat = getGaussCov(kern,x,x)
+  print(covMat[1:5,1:5])
+
+ 
+  yhat = predict(fitted,x) #i
+  
+  sigma_post = sqrt(diag(covMat))
+  
+  plot(x,y, type="l",ylim=c(-1.5,1.5), main=paste("ell =",l))
+  lines(x,yhat, col="red")
+  lines(x, yhat + sigma_post*1.96, col="blue")
+  lines(x, yhat - sigma_post*1.96, col="blue")
+  
+  lines(x, yhat + sqrt(sigma_post^2 + sigma_n^2)*1.96, col="red", lty="dotted")
+  lines(x, yhat - sqrt(sigma_post^2 + sigma_n^2)*1.96, col="red", lty ="dotted")
+  legend("bottomright",
+    legend = c("data", "posterior mean", "95% posterior mean", "95% prediction interval"),
+    col = c("black", "red", "blue","red"),
+    lty = c("solid","solid","solid","dotted"),
+    cex = .75,
+    inset = .01
+  )
+  }
+
+
+#using a higher ell makes the predictions smoother 
+
+
+```
+
+
+
+
+
+
+```{r}
+
+
+
+
+
+```
+
+
+
+

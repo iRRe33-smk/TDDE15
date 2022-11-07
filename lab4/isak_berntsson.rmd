@@ -1,12 +1,12 @@
 ---
-title: "Isak_Berntsson_lab4.rmd"
-author: "Isak Berntsson"
+title: "lab4.rmd"
+author: ""
 date: "10/6/2022"
 output: pdf_document
 ---
 
 
-#contribution
+## contribution
 
 Used Isak Berntsson as base, minor changes made.
 
@@ -14,7 +14,7 @@ Answers given after group discussions.
 isabe723, erija971, ludkn080, linbe580
 
 ```{r include = FALSE}
-#setwd("C:/Users/IsakG/projects/TDDE15/lab4")
+setwd("C:/Users/IsakG/projects/TDDE15/lab4")
 #source("GaussianProcesses.R")
 # Covariance function
 
@@ -209,8 +209,8 @@ X = runif(100,-5,5)
 
 kern= SEK(ell=1,sigmaf=1)
 
-print("evaluated at (1,2)")
-kern(1,2)
+print(paste("kernel evaluated at (1,2)",kern(1,2)))
+
 
 
 X = c(1,3,4)
@@ -234,35 +234,38 @@ head(df_fit)
 linmod = lm("temp ~ const + time + time2 - 1 ",data = df_fit)
 linmod
 
-yhat = predict(object = linmod, data=df_fit)
+linearPrediction = predict(object = linmod, data=df_fit)
+
+residuals = linearPrediction - df_fit$temp
+sigma_n = sd(residuals)
 
 #used for descaling later
 y_Sd = sd(df_fit$temp)
 y_m = mean(df_fit$temp)
 
-posterior = posteriorGP(X = scale(df_fit$time), y = scale(df_fit$temp), X_star = scale(df_fit$time), sigmaNoise = sigma_n ,k = kern)
-
-residuals = yhat - df_fit$temp
-sigma_n = sd(residuals)
 
 ell = .2
 sigma_f = 20
-
 kern = SEK(ell,sigmaf = sigma_f)
 
 
-
 mod = gausspr(df_fit$time, df_fit$temp , kernel=kern, var = sigma_n^2)
-yhat = predict(mod, df_fit$time)
+posterior_mean = predict(mod, df_fit$time)
 
 
 
-plot(df_fit$time,df_fit$temp, main="temperature and posterior mean", sub=paste("sigma_n=",sigma_n))
-lines(df_fit$time,yhat, col="red")
-#lines(df_fit$time,posterior$mean, col="green")
+plot(df_fit$time,df_fit$temp, main="temperature and posterior mean",sub=paste("sigma_n=",sigma_n), type="l", lwd=1)
 
+lines(df_fit$time,posterior_mean, col="blue", lwd=2)
+'legend( 
+  legend =c("measured temperature", "posterior Mean"),
+  col = c("black", "blue"),
+  lty=c("l","l"),
+  lwd = c(2,2),
+  inset=0.05
+)'
 
-old_posterior_mean = yhat #used in subtask 4
+#old_posterior_mean = yhat #used in subtask 4
 
 
 
@@ -273,20 +276,25 @@ The posterior follows the data well. The posterior has some trouble in the most 
 ## Subtask 3
 
 ```{r}
+ell =  .2
+sigma_f = 20
 
-posterior_sigma = sqrt(posterior$var[1,1])
-posterior_sigma
+kern = SEK(ell,sigma_f)
 
+posterior = posteriorGP(X = scale(df_fit$time), y = scale(df_fit$temp), X_star = scale(df_fit$time), sigmaNoise = sigma_n ,k = kern)
+
+posterior_sigma = sqrt(diag(posterior$var))
+yhat = posterior$mean * y_Sd + y_m
 
 plot(df_fit$time,df_fit$temp, type="l", main="temperature posterior mean, 95 probability band", sub=paste("sigma_n=",sigma_n))
-lines(df_fit$time,yhat, col="red")
-lines(df_fit$time,posterior$mean*y_Sd + y_m, col="green")
 
-lines(df_fit$time, yhat + 1.96 * posterior_sigma, col="blue")
-lines(df_fit$time, yhat - 1.96 * posterior_sigma, col="blue")
+lines(df_fit$time, yhat, col="green", lwd = 2)
 
-posterior_sigma
+lines(df_fit$time, yhat + 1.96 * posterior_sigma, col="blue", lwd=2)
+lines(df_fit$time, yhat - 1.96 * posterior_sigma, col="blue", lwd =2)
 
+
+yhat_from_3 = yhat
 ```
 Bands seem to capture the variance of the measuremetns weell.
 
@@ -295,6 +303,8 @@ Bands seem to capture the variance of the measuremetns weell.
 ## Subtask 4
 
 ```{r}
+
+
 
 df_fit = data.frame(temp = sample_dat$temp, const = 1, day= sample_dat$day, day2 = (sample_dat$day)^2 )
 head(df_fit)
@@ -312,20 +322,22 @@ sigma_n = sd(residuals)
 
 ell = .2
 sigma_f = 20
-
 kern = SEK(ell,sigmaf = sigma_f)
+
 posterior = posteriorGP(X = df_fit$day, y = df_fit$temp, X_star = df_fit$day, sigmaNoise = sigma_n ,k = kern)
 
 plot(sample_dat$time,df_fit$temp, type="l", main="temperature and posterior mean", sub=paste("sigma_n=",sigma_n))
-#lines(sample_dat$time,yhat, col="red")
-lines(sample_dat$time,old_posterior_mean, col="red", lwd=2)
-lines(sample_dat$time,yhat, col="green", lwd =2)
+
+
+lines(sample_dat$time,yhat_from_3, col="red", lwd=2)
+lines(sample_dat$time,posterior$mean, col="green", lwd =2)
 
 
 ```
 
-This new model based on day rather than time can handle the predictable annual changes in temperature in a much better way. 
-sigma_n takes on a much smaller value with the new model. 8.17 -> 4.85 because the residuals are much smaller / fit is better.
+The new models is not as smooth as the old one. The fitted function fits the data better.
+
+sigma_n takes on a much smaller value with the new model. 8.17 -> 4.85 because the residuals  from the linear model are much smaller / fit is better.
 
 
 
@@ -338,31 +350,19 @@ sigma_n takes on a much smaller value with the new model. 8.17 -> 4.85 because t
 df_fit = data.frame(temp = sample_dat$temp, const = 1, time= sample_dat$time, time2 = (sample_dat$time)^2 )
 
 
-SEK_periodic = function(ell_1, ell_2, d, sigmaf){
-  
-  kernel = function(X,X_star){
-    
-    X = as.matrix(X)
-    X_star = as.matrix(X_star)
-    
-    #dimX_star = dim(X_star)
-    
-    res = matrix(0,nrow=length(X),ncol=length(X_star))
-    
-    #print(dim(res))
-    
-    for( i in 1:length(X)){
-
- 
-      vals= sigmaf^2 * exp((-2/ell_1^2)*sin(pi * abs(X-X_star[i,])/d)^2)  * exp(-.5 * abs(X-X_star[i,])^2 / ell_2^2 )
-
-      res[i,] = vals
-    }
-    return(res)
+periodicKernelFunction <- function(sigmaf, l1, l2, d)
+{
+  periodicKernel <- function(x, xStar)
+  {
+    tmp = abs(x-xStar)
+    p1 = sigmaf^2*exp(-( (2*sin(pi*tmp))/d)/l1^2)
+    p2 = exp(-0.5 * tmp^2 / l2^2)
+    return(p1*p2)
   }
-  class(kernel) = "kernel"
-  return(kernel)
+  class(periodicKernel) = "kernel"
+  return (periodicKernel)
 }
+
 
 
 
@@ -371,7 +371,7 @@ l1 = 1
 l2 = 10
 d = 365/sd(df_fit$time)
 
-kern = SEK_periodic(l1, l2, d, sigma_f)
+kern = periodicKernelFunction(sigma_f,l1, l2, d)
 
 
 
@@ -380,16 +380,16 @@ mod = gausspr(x = df_fit$time, y=df_fit$temp, kernel = kern, var= sigma_n^2)
 yhat = predict(mod, df_fit$time)
 
 residuals = yhat - df_fit$temp
-sigma_n = sd(residuals)
 
-plot(df_fit$time, df_fit$temp, sub= sigma_n, main ="using periodic kernel")
-lines(df_fit$time, yhat, col="green")
-#contour()
+
+plot(df_fit$time, df_fit$temp, main ="using periodic kernel")
+lines(df_fit$time, yhat, col="blue", lwd=2 )
+
 
 ```
 
 
-Thsi model genereates predictions that are periodic and smoother while still following the general upwards trend.
+This model generates predictions that are periodic and smoother while still following the general upwards trend.
 
 
 \newpage
@@ -414,9 +414,11 @@ head(df_train)
 mod = gausspr(x = df_train[, 1:2], y=df_train$fraud, type="classification")
 
 
-yhat = predict(mod, df_train[,1:2])
+yhat_proba = predict(mod, df_train[,1:2], type="probabilities")
+yhat_bin = yhat_proba[,2]>.5
 
-conf_mat = table(yhat,df_train$fraud)
+
+conf_mat = table(yhat_bin,df_train$fraud)
 conf_mat
 
 acc = sum(diag(conf_mat)) / sum(conf_mat)
@@ -424,40 +426,31 @@ acc
 
 
 
-
-
-
-
-
-
-
-
-
-
-n=30
+n=100
 g1 = seq(min(df_train$varWave),max(df_train$varWave), length.out=n )
 g2 = seq(min(df_train$skewWave),max(df_train$skewWave), length.out=n )
 
-grid = expand.grid(g1,g2)
-colnames(grid) = c("varWave", "skewWave")
+
+x1matrix = matrix(nrow=100, ncol=100)
+for (i in 1:100){
+  x1matrix[i,] = g1
+}
+x2matrix = matrix(nrow=100, ncol=100, data=g2)
+grid <- cbind(c(x1matrix), c(x2matrix))
+grid <- data.frame(grid)
+names(grid) <- names(data)[1:2]
+prediction_prob <- predict(mod, grid, type="probabilities")
 
 
-yhat_grid = (as.numeric( predict(mod,grid)) - 1) == 1
 
-fraud_bool = (as.numeric(df_train$fraud) - 1) == 1
-countour = grid[yhat_grid,]
-
+fraud_bool = df_train$fraud == 1
 cols = array("red",length(fraud_bool))
-
 cols[fraud_bool] = "blue"
 
-'plot(countour$varWave, countour$skewWave,col="black")
+
+#plot()
+contour(g1,g2,matrix(prediction_prob[,2],100,byrow = TRUE), 10, main="contour Plot with true values marked")
 points(df_train$varWave,df_train$skewWave, col=cols)
-'
-
-plot(df_train$varWave,df_train$skewWave, col=cols)
-points(countour$varWave, countour$skewWave,col="black")
-
 
 ```
 

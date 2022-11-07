@@ -1,0 +1,271 @@
+---
+title: "iRRe33_sol"
+author: "Isak Berntsson"
+date: "10/23/2022"
+output: pdf_document
+---
+
+# Task 1 graphical models
+```{r setup}
+library(bnlearn)
+library(gRain)
+
+```
+
+
+
+```{r}
+#set.seed(567)
+set.seed(1337)
+data("asia")
+ind <- sample(1:5000, 4000)
+tr <- asia[ind,]
+te <- asia[-ind,]
+
+nodes = colnames(te)
+
+NBModel = empty.graph(nodes)
+#NBModel = model2network(c("[",paste(nodes,sep="]["),"]"))
+
+for (other in nodes[-2]){
+  NBModel = set.arc(NBModel, "S", other)
+
+}
+plot(NBModel)
+#NBModel = as.bn(NBModel)
+#NBModel = as.bn(model2network(modelstring(NBModel)))
+
+numPoints = c(10, 20, 50, 100, 1000, 2000)
+
+for (n in numPoints){
+  NBMFitted = bn.fit(x = NBModel, data=tr[1:n,], method="bayes")
+  
+  
+  
+  predictions = matrix(nrow=1000,ncol=1)
+  colnames(res) = c("no", "yes")
+  for (i in 1:1000){
+    grainfit = as.grain(NBMFitted)
+    NBMCompiled = compile(grainfit)
+
+    #NBMCompiled = compile(NBMFitted)
+    
+    NBM_evd = setEvidence(NBMCompiled,nodes = nodes[-2],states = te[i,-2] )
+    
+    q = querygrain(NBM_evd, nodes= c("S"))$S
+    
+    if (q[1]>=.5){
+      pred = "yes"
+    } else{
+      pred = "no"
+    }
+    
+    predictions[i] = pred
+    
+  }
+  
+  accuracy = mean(predictions == te[1:n,2])
+  print(paste(n,"->",accuracy))
+  print(mean(predictions == "yes"))
+
+  print("\n")
+}
+
+
+```
+
+```{r}
+#states
+s1 = sample(c("yes","no"),7,replace = T)
+NBM_evd = setEvidence(NBMCompiled,nodes = nodes[-2],states = s1)#te[i,-2] )
+    
+querygrain(NBM_evd, nodes= c("S"))$S
+
+```
+
+
+
+
+
+
+
+
+# Task 2 HMM
+
+```{r}
+library(HMM)
+library(entropy)
+set.seed(567)
+States=1:10
+Symbols=1:10
+transProbs=matrix(c(.5,.5,0,0,0,0,0,0,0,0,
+                    0,.5,.5,0,0,0,0,0,0,0,
+                    0,0,.5,.5,0,0,0,0,0,0,
+                    0,0,0,.5,.5,0,0,0,0,0,
+                    0,0,0,0,.5,.5,0,0,0,0,
+                    0,0,0,0,0,.5,.5,0,0,0,
+                    0,0,0,0,0,0,.5,.5,0,0,
+                    0,0,0,0,0,0,0,.5,.5,0,
+                    0,0,0,0,0,0,0,0,.5,.5,
+                    .5,0,0,0,0,0,0,0,0,.5), nrow=length(States), ncol=length(States), byrow = TRUE)
+
+emissionProbs=matrix(c(.2,.2,.2,0,0,0,0,0,.2,.2,
+                       .2,.2,.2,.2,0,0,0,0,0,.2,
+                       .2,.2,.2,.2,.2,0,0,0,0,0,
+                       0,.2,.2,.2,.2,.2,0,0,0,0,
+                       0,0,.2,.2,.2,.2,.2,0,0,0,
+                       0,0,0,.2,.2,.2,.2,.2,0,0,
+                       0,0,0,0,.2,.2,.2,.2,.2,0,
+                       0,0,0,0,0,.2,.2,.2,.2,.2,
+                       .2,0,0,0,0,0,.2,.2,.2,.2,
+                       .2,.2,0,0,0,0,0,.2,.2,.2), nrow=length(States), ncol=length(States), byrow = TRUE)
+
+startProbs=c(.1,.1,.1,.1,.1,.1,.1,.1,.1,.1)
+
+hmm=initHMM(States,Symbols,startProbs,transProbs,emissionProbs)
+Tmax = 100
+sim=simHMM(hmm,Tmax)
+```
+
+
+```{r}
+n=5
+States = 1:n
+Symbols = 1:n
+startProbs = rep(1/n,n)
+transProbs = diag(n)*.8
+emissionProbs = diag(n)/3
+for (i in 1:n-1){
+  transProbs[i,i+1] = .2
+}
+
+for (i in 1:n){
+  emissionProbs[i, ((i-2):(i))%%n +1 ] = 1/3  
+}
+
+print(transProbs)
+print(emissionProbs)
+hmm=initHMM(States,Symbols,startProbs,transProbs,emissionProbs)
+Tmax = 10
+sim=simHMM(hmm,Tmax)
+
+obs = matrix(0, nrow = Tmax, ncol = length(States))
+
+for ( t in 1:Tmax){
+  obs[t,sim$observation[t]] = 1  
+}
+obs
+```
+
+
+```{r}
+alpha = matrix(0, nrow = Tmax+1 , ncol = length(States))
+
+
+
+alpha[1,] = t(obs[1,]) %*% emissionProbs * startProbs #p(z_o)  
+for ( t in 2:Tmax){
+
+  alpha[t,] = z %*%emissionProbs * sum(alpha[t-1,] * )
+  
+}
+
+
+
+
+#round(alpha[1:5,],digits=1)
+filtered = round(prop.table(alpha,margin=1), digits=1)
+filtered
+
+logf=forward(hmm,sim$observation)
+ef=exp(logf)
+pt=t(prop.table(ef,2))
+round(pt, digits=1)
+
+#fitered_true = t(prop.table(exp(forward(hmm,sim$observation))))
+#round(fitered_true, digits =1)
+```
+
+
+
+# Task 4 gaussian process
+```{r}
+# Matern32  kernel
+k <- function(sigmaf = 1, ell = 1)  
+{   
+	rval <- function(x, y = NULL) 
+	{	r = sqrt(crossprod(x-y))
+		 return(sigmaf^2*(1+sqrt(3)*r/ell)*exp(-sqrt(3)*r/ell))   
+	}   
+	class(rval) <- "kernel"   
+	return(rval) 
+} 
+
+
+
+sigma_f = 1
+ell = .5
+
+kern = k(sigma_f, ell = ell)
+zGrid = seq(0.01,1,by=0.01)
+
+kern_vals = NULL
+for (z in zGrid){
+  kern_vals = c(kern_vals, kern(0,z))
+}
+
+plot(zGrid,kern_vals, main="sigmaf = 1")
+#kern(rep(0,length(zGrid)),zGrid)
+
+
+kern = k(.5, ell = ell)
+kern_vals = NULL
+for (z in zGrid){
+  kern_vals = c(kern_vals, kern(0,z))
+}
+
+plot(zGrid,kern_vals, main="sigmaf = .5")
+
+#the curves have the same shape but a higher sigma gives higher results for all inputs
+# The smoothness 
+```
+
+
+```{r}
+load("lidar.RData")
+library("kernlab")
+
+'X = matrix(0,nrow=length(distance),ncol=2)
+X[,1] = distance
+X[,2] = log(distance^2 + 1E-3)
+distance = X'
+
+getGaussCov = function(kern, x,x_star){
+covMat = kernelMatrix(kern,x_star, x_star) - kernelMatrix(kern, x_star,x) %*% solve(kernelMatrix(kern,x,x) + sigma_n * diag(length(x))) %*%kernelMatrix(kern,x,x_star)
+return(covMat)  
+}
+ell = c(1, 5)
+
+for (ell in c(0.01, 1, 5) ){
+  sigma_n = 0.05
+  
+  sigma_f = 1
+  
+  kern = k(sigmaf = sigma_f, ell = ell)
+  posterior = gausspr(x=distance, y=logratio, kernel = kern, var = sigma_n)
+  
+  yhat = predict(object = posterior, distance)
+  sigma_hat = sqrt(diag(getGaussCov(kern,distance,distance)))
+  
+  plot(distance, logratio, ylim=c(-1.2,.5), main=paste("ell = ",ell))
+  lines(distance, yhat, col = "red", lwd=2)
+  
+  lines(distance, yhat + 1.96 * sigma_hat, col = "blue", lwd=2, lty=2)
+  lines(distance, yhat - 1.96 * sigma_hat, col = "blue", lwd=2, lty=2)
+  
+  lines(distance, yhat + 1.96 * sqrt(sigma_hat^2 + sigma_n^2), col = "red", lwd=2, lty=2)
+  lines(distance, yhat - 1.96 * sqrt(sigma_hat^2 + sigma_n^2), col = "red", lwd=2, lty=2)
+}
+
+```
+
